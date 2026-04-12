@@ -1,6 +1,9 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Button, RichLog, Footer
+from textual.widgets import Input, Button, Label, RichLog, Footer
 from textual.screen import Screen
+
+import threading
+from core import server, client
 
 
 ROOM = "lamp"    # room-code
@@ -18,6 +21,7 @@ class HomeScreen(Screen):
         yield Button("Exit", id="exit")
 
         # host or join screen input fields and buttons
+        yield Label("", id="generated_code")
         yield Input(placeholder="Room Code", id="room_code")
         yield Input(placeholder="Host IP", id="host_ip")
         yield Button("Create", id="create_room")
@@ -34,6 +38,7 @@ class HomeScreen(Screen):
         yield Footer()
 
     def on_mount(self):
+        self.query_one("#generated_code").display = False
         self.query_one("#room_code").display = False
         self.query_one("#host_ip").display = False
         self.query_one("#create_room").display = False
@@ -52,6 +57,7 @@ class HomeScreen(Screen):
         self.query_one("#settings").display = True
         self.query_one("#exit").display = True
 
+        self.query_one("#generated_code").display = False
         self.query_one("#room_code").display = False
         self.query_one("#host_ip").display = False
         self.query_one("#create_room").display = False
@@ -68,10 +74,12 @@ class HomeScreen(Screen):
             self.query_one("#settings").display = False
             self.query_one("#exit").display = False
 
+            self.query_one("#generated_code").display = True
             self.query_one("#create_room").display = True
             self.query_one("#back").display = True
 
-            # here, randomly generated room code is displayed
+            self.query_one("#generated_code", Label).update(f"ROOM CODE: {ROOM}")
+
             # upon selecting enter, host joins the chat and room is created
             # and host_ip is broadcasted (later UDP functionality)
 
@@ -86,6 +94,8 @@ class HomeScreen(Screen):
             self.query_one("#join_room").display = True
             self.query_one("#back").display = True
 
+            self.notify(f"{ROOM} - {HOST}")
+
         elif event.button.id == "settings":
             self.query_one("#host").display = False
             self.query_one("#join").display = False
@@ -96,8 +106,6 @@ class HomeScreen(Screen):
             self.query_one("#display_color").display = True
             self.query_one("#update").display = True
             self.query_one("#back").display = True
-
-            self.notify(f"{ROOM} - {HOST}")
 
         elif event.button.id == "update":
             global display_name, display_color
@@ -113,6 +121,7 @@ class HomeScreen(Screen):
             self.query_one("#settings").display = True
             self.query_one("#exit").display = True
 
+            self.query_one("#generated_code").display = False
             self.query_one("#room_code").display = False
             self.query_one("#host_ip").display = False
             self.query_one("#create_room").display = False
@@ -128,6 +137,9 @@ class HomeScreen(Screen):
             # if it is true then host will display its hosting_ip and create a room.
             # (in this case host will be broadcasting its ip UDP Broadcast)
 
+            threading.Thread(target=server.start_server, args=(ROOM,), daemon=True).start()
+            client.connect(host="127.0.0.1", port=5000, username=display_name, color=display_color, room_code=ROOM)
+
             self.app.push_screen(ChatScreen(display_name, display_color))
             self.notify("room created.")
 
@@ -135,11 +147,14 @@ class HomeScreen(Screen):
             room_code = self.query_one("#room_code", Input).value
             host_ip = self.query_one("#host_ip", Input).value
 
-            if room_code == ROOM and host_ip == HOST:
+            # if room_code == ROOM and host_ip == HOST:
+            try:
+                client.connect(host=host_ip, port=5000, username=display_name, color=display_color, room_code=room_code)
+
                 self.app.push_screen(ChatScreen(display_name, display_color))
                 self.notify("chat joined.")
-            else:
-                self.notify("Red")
+            except Exception:
+                self.notify("Failed to connect.")
 
 
 class ChatScreen(Screen):
@@ -155,15 +170,25 @@ class ChatScreen(Screen):
 
     def on_mount(self):
         self.query_one("#message_input").focus()
+        threading.Thread(target=client.receive_message, args=(self.display_message,), daemon=True).start()
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "leave":
+            client.send_leave(self.user, self.color)
+            self.app.pop_screen()
 
     def on_input_submitted(self, event: Input.Submitted):
         log = self.query_one("#messages", RichLog)
         log.write(f"[{self.color}]{self.user}[/{self.color}] > {event.value}")
+        client.send_message(self.user, self.color, event.value)
         event.input.clear()
 
-    def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "leave":
-            self.app.pop_screen()
+    def _write_message(self, message):
+        log = self.query_one("#messages", RichLog)
+        log.write(message)
+
+    def display_message(self, message):
+        self.app.call_from_thread(self._write_message, message)
 
 class LaternApp(App):
     CSS_PATH = "lantern.tcss"
@@ -174,11 +199,5 @@ class LaternApp(App):
         # ("escape", "back", "Back"),
     ]
 
-    def compose(self) -> ComposeResult:
-        yield Footer()
-
     def on_mount(self):
         self.push_screen(HomeScreen())
-
-if __name__ == "__main__":
-    LaternApp().run()
