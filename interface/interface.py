@@ -6,7 +6,8 @@ import threading
 from core import server, client
 from utils import broadcast, room_config
 
-
+ROOM_CODE = ""
+ROOM_NAME = ""
 display_name = "guest01"
 display_color = "green"
 
@@ -19,9 +20,8 @@ class HomeScreen(Screen):
         yield Button("Exit", id="exit")
 
         # host or join screen input fields and buttons
-        yield Label("", id="generated_code")
+        yield Label("", id="room_details")
         yield Input(placeholder="Room Code", id="room_code")
-        yield Input(placeholder="Host IP", id="host_ip")
         yield Button("Create", id="create_room")
         yield Button("Join", id="join_room")
 
@@ -35,18 +35,9 @@ class HomeScreen(Screen):
 
         yield Footer()
 
-    def auto_discover_host(self):
-        host_ip, room_code, room_name = broadcast.listen_for_host()
-        self.app.call_from_thread(self._fill_host_fields, host_ip, room_code)
-
-    def _fill_host_fields(self, host_ip, room_code):
-        self.query_one("#host_ip", Input).value = host_ip
-        self.query_one("#room_code", Input).value = room_code
-
     def on_mount(self):
-        self.query_one("#generated_code").display = False
+        self.query_one("#room_details").display = False
         self.query_one("#room_code").display = False
-        self.query_one("#host_ip").display = False
         self.query_one("#create_room").display = False
         self.query_one("#join_room").display = False
 
@@ -57,15 +48,18 @@ class HomeScreen(Screen):
         self.query_one("#back").display = False
         # more settings fields and buttons here
 
+        self.discovered_host_ip = None
+        self.discovered_room_code = None
+        self.discovered_room_name = None
+
     def on_screen_resume(self):
         self.query_one("#host").display = True
         self.query_one("#join").display = True
         self.query_one("#settings").display = True
         self.query_one("#exit").display = True
 
-        self.query_one("#generated_code").display = False
+        self.query_one("#room_details").display = False
         self.query_one("#room_code").display = False
-        self.query_one("#host_ip").display = False
         self.query_one("#create_room").display = False
         self.query_one("#join_room").display = False
         self.query_one("#display_name").display = False
@@ -73,35 +67,19 @@ class HomeScreen(Screen):
         self.query_one("#update").display = False
         self.query_one("#back").display = False
 
+    def _handle_host_fields(self, host_ip, room_code, room_name):
+        self.discovered_host_ip = host_ip
+        self.discovered_room_code = room_code
+        self.discovered_room_name = room_name
+
+    def auto_discover_host(self):
+        host_ip, room_code, room_name = broadcast.listen_for_host()
+        self.app.call_from_thread(self._handle_host_fields, host_ip, room_code, room_name)
+
+
     def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id == "host":
-            global ROOM_CODE, ROOM_NAME
-            ROOM_CODE = room_config.generate_room_code()
-            ROOM_NAME = room_config.generate_room_name()
-
-            self.query_one("#host").display = False
-            self.query_one("#join").display = False
-            self.query_one("#settings").display = False
-            self.query_one("#exit").display = False
-
-            self.query_one("#generated_code").display = True
-            self.query_one("#create_room").display = True
-            self.query_one("#back").display = True
-
-            self.query_one("#generated_code", Label).update(f"ROOM CODE: {ROOM_CODE}")
-
-        elif event.button.id == "join":
-            threading.Thread(target=self.auto_discover_host, daemon=True).start()
-
-            self.query_one("#host").display = False
-            self.query_one("#join").display = False
-            self.query_one("#settings").display = False
-            self.query_one("#exit").display = False
-
-            self.query_one("#room_code").display = True
-            self.query_one("#host_ip").display = True
-            self.query_one("#join_room").display = True
-            self.query_one("#back").display = True
+        if event.button.id == "exit":
+            self.app.exit()
 
         elif event.button.id == "settings":
             self.query_one("#host").display = False
@@ -113,14 +91,12 @@ class HomeScreen(Screen):
             self.query_one("#display_color").display = True
             self.query_one("#update").display = True
             self.query_one("#back").display = True
+            # A label is needed to display the current name and get update when update is pressed.
 
         elif event.button.id == "update":
             global display_name, display_color
             display_name = self.query_one("#display_name", Input).value
             display_color = self.query_one("#display_color", Input).value
-
-        elif event.button.id == "exit":
-            self.app.exit()
 
         elif event.button.id == "back":
             self.query_one("#host").display = True
@@ -128,15 +104,42 @@ class HomeScreen(Screen):
             self.query_one("#settings").display = True
             self.query_one("#exit").display = True
 
-            self.query_one("#generated_code").display = False
+            self.query_one("#room_details").display = False
             self.query_one("#room_code").display = False
-            self.query_one("#host_ip").display = False
             self.query_one("#create_room").display = False
             self.query_one("#join_room").display = False
             self.query_one("#display_name").display = False
             self.query_one("#display_color").display = False
             self.query_one("#update").display = False
             self.query_one("#back").display = False
+
+        elif event.button.id == "host":
+            global ROOM_CODE, ROOM_NAME
+            ROOM_CODE = room_config.generate_room_code()
+            ROOM_NAME = room_config.generate_room_name()
+
+            self.query_one("#host").display = False
+            self.query_one("#join").display = False
+            self.query_one("#settings").display = False
+            self.query_one("#exit").display = False
+
+            self.query_one("#room_details").display = True
+            self.query_one("#create_room").display = True
+            self.query_one("#back").display = True
+
+            self.query_one("#room_details", Label).update(f"ROOM CODE: {ROOM_CODE}\tROOM NAME: {ROOM_NAME}")
+
+        elif event.button.id == "join":
+            threading.Thread(target=self.auto_discover_host, daemon=True).start()
+
+            self.query_one("#host").display = False
+            self.query_one("#join").display = False
+            self.query_one("#settings").display = False
+            self.query_one("#exit").display = False
+
+            self.query_one("#room_code").display = True
+            self.query_one("#join_room").display = True
+            self.query_one("#back").display = True
 
         elif event.button.id == "create_room":
             threading.Thread(target=server.start_server, args=(ROOM_CODE,), daemon=True).start()
@@ -148,15 +151,24 @@ class HomeScreen(Screen):
 
         elif event.button.id == "join_room":
             room_code = self.query_one("#room_code", Input).value
-            host_ip = self.query_one("#host_ip", Input).value
+            discovered_host_ip = self.discovered_host_ip
+            discovered_room_code = self.discovered_room_code
+            discovered_room_name = self.discovered_room_name
 
-            try:
-                client.connect(host=host_ip, port=5000, username=display_name, color=display_color, room_code=room_code)
+            if not discovered_host_ip:
+                self.notify("Host not found yet.")
+                return
+            else:
+                if room_code == discovered_room_code:
+                    try:
+                        client.connect(host=discovered_host_ip, port=5000, username=display_name, color=display_color, room_code=room_code)
 
-                self.app.push_screen(ChatScreen(display_name, display_color))
-                self.notify("chat joined.")
-            except Exception:
-                self.notify("Failed to connect.")
+                        self.app.push_screen(ChatScreen(display_name, display_color))
+                        self.notify(f"{discovered_room_name} joined.")
+                    except Exception:
+                        self.notify("Failed to connect.")
+                else:
+                    self.notify("Incorrect password")
 
 
 class ChatScreen(Screen):
