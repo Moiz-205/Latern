@@ -4,12 +4,11 @@ from textual.screen import Screen
 
 import threading
 from core import server, client
-from utils import broadcast, room_config
+from utils import broadcast, room_config, user_config
 
 ROOM_CODE = ""
 ROOM_NAME = ""
-display_name = "guest01"
-display_color = "green"
+display_name, display_color = user_config.load_config()
 
 class HomeScreen(Screen):
     def compose(self) -> ComposeResult:
@@ -97,6 +96,7 @@ class HomeScreen(Screen):
             global display_name, display_color
             display_name = self.query_one("#display_name", Input).value
             display_color = self.query_one("#display_color", Input).value
+            user_config.update_config(display_name, display_color)
 
         elif event.button.id == "back":
             self.query_one("#host").display = True
