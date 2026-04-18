@@ -1,5 +1,5 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Button, Label, RichLog, Footer
+from textual.widgets import Input, Button, Label, RichLog, Footer, Static
 from textual.screen import Screen
 
 import threading
@@ -151,20 +151,20 @@ class HomeScreen(Screen):
 
         elif event.button.id == "join_room":
             room_code = self.query_one("#room_code", Input).value
-            discovered_host_ip = self.discovered_host_ip
-            discovered_room_code = self.discovered_room_code
-            discovered_room_name = self.discovered_room_name
+            HOST_IP = self.discovered_host_ip
+            ROOM_CODE = self.discovered_room_code
+            ROOM_NAME = self.discovered_room_name
 
-            if not discovered_host_ip:
+            if not HOST_IP:
                 self.notify("Host not found yet.")
                 return
             else:
-                if room_code == discovered_room_code:
+                if room_code == ROOM_CODE:
                     try:
-                        client.connect(host=discovered_host_ip, port=5000, username=display_name, color=display_color, room_code=room_code)
+                        client.connect(host=HOST_IP, port=5000, username=display_name, color=display_color, room_code=room_code)
 
                         self.app.push_screen(ChatScreen(display_name, display_color))
-                        self.notify(f"{discovered_room_name} joined.")
+                        self.notify(f"{ROOM_NAME} joined.")
                     except Exception:
                         self.notify("Failed to connect.")
                 else:
@@ -178,11 +178,13 @@ class ChatScreen(Screen):
         self.color = color
 
     def compose(self) -> ComposeResult:
+        yield Static(id="header")
         yield RichLog(id="messages", markup=True)
         yield Input(placeholder="Type a message...", id="message_input")
         yield Button("Leave", id="leave")
 
     def on_mount(self):
+        self.query_one("#header", Static).update(f"Room Name: [bold]{ROOM_NAME}[/bold]\t\t\t ━━━ \t\t\tRoom Code: [bold]{ROOM_CODE}[/bold]")
         self.query_one("#message_input").focus()
         threading.Thread(target=client.receive_message, args=(self.display_message,), daemon=True).start()
 

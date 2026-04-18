@@ -57,6 +57,13 @@ RichLog {
     margin-bottom: 1;
 }
 
+#header {
+    background: #282a36;
+    color: #ffb86c;
+    width: 100%;
+    text-align: center;
+}
+
 Footer {
     background: #44475a;
     color: #f8f8f2;
