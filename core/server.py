@@ -9,13 +9,29 @@ PORT = 5000
 clients = {}        # {key=client sockets, value=username}
 lock = threading.Lock()
 
+def start_server(room_code):
+    global server_socket
+    room_active = [True]
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind((HOST, PORT))
+
+    server_socket.listen()
+
+    while room_active[0]:
+        try:
+            client_socket, _ = server_socket.accept()
+            threading.Thread(target=handle_client, args=(client_socket, room_code, room_active)).start()
+        except Exception:
+            break
+
 def broadcast(message, sender_socket):
     with lock:
         for client_socket in clients:
             if client_socket != sender_socket:
                 client_socket.send(message)
 
-def handle_client(client_socket, room_code):
+def handle_client(client_socket, room_code, room_active):
     join_request = client_socket.recv(1024)
     decoded_request = protocol.decode(join_request)
     join_code = decoded_request.get("room_code")
@@ -24,14 +40,14 @@ def handle_client(client_socket, room_code):
         client_socket.close()
         return
 
-    new_client = {client_socket: decoded_request.get("username")}
-    clients.update(new_client)
-
     message_type = decoded_request.get("type")
     username = decoded_request.get("username")
     color = decoded_request.get("color")
-    message_dict = {"type": message_type, "username": username, "color": color}
 
+    new_client = {client_socket: username}
+    clients.update(new_client)
+
+    message_dict = {"type": message_type, "username": username, "color": color}
     message = protocol.encode(message_dict)
     broadcast(message, client_socket)
 
@@ -48,18 +64,9 @@ def handle_client(client_socket, room_code):
             leave_dict = {"type": "leave", "username": user}
             leave_message = protocol.encode(leave_dict)
             broadcast(leave_message, client_socket)
-
             client_socket.close()
+
+            if len(clients) == 0:
+                room_active[0] = False
+                server_socket.close()
             break
-
-def start_server(room_code):
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((HOST, PORT))
-
-    server_socket.listen()
-    print(f"Server listening on {HOST}:{PORT}")
-
-    while True:
-        client_socket, _ = server_socket.accept()
-        threading.Thread(target=handle_client, args=(client_socket, room_code)).start()
