@@ -68,3 +68,18 @@ Footer {
     background: #44475a;
     color: #f8f8f2;
 }
+
+UsersPanel {
+    align: center middle;
+}
+
+#user_panel {
+    background: #383a4a;
+    color: #f8f8f2;
+    border: tall #6272a4;
+    width: 40;
+    height: auto;
+    margin: 0 30;
+    padding: 1 2;
+    text-align: center;
+}
