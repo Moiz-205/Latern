@@ -1,6 +1,6 @@
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Button, Label, RichLog, Footer, Static
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 
 import threading
 from core import server, client
@@ -176,22 +176,27 @@ class ChatScreen(Screen):
         super().__init__()
         self.user = name
         self.color = color
+        self.connected_users = {}
 
     def compose(self) -> ComposeResult:
         yield Static(id="header")
         yield RichLog(id="messages", markup=True)
         yield Input(placeholder="Type a message...", id="message_input")
+        yield Button("Users", id="users")
         yield Button("Leave", id="leave")
 
     def on_mount(self):
         self.query_one("#header", Static).update(f"Room Name: [bold]{ROOM_NAME}[/bold]\t\t\t ━━━ \t\t\tRoom Code: [bold]{ROOM_CODE}[/bold]")
         self.query_one("#message_input").focus()
-        threading.Thread(target=client.receive_message, args=(self.display_message,), daemon=True).start()
+        threading.Thread(target=client.receive_message, args=(self.display_message, self.display_user), daemon=True).start()
+        self._update_user(self.user, self.color, "join")    # manually handling the host for user_panel
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "leave":
             client.send_leave(self.user, self.color)
             self.app.pop_screen()
+        if event.button.id == "users":
+            self.app.push_screen(UsersPanel(self.connected_users))
 
     def on_input_submitted(self, event: Input.Submitted):
         log = self.query_one("#messages", RichLog)
@@ -205,6 +210,34 @@ class ChatScreen(Screen):
 
     def display_message(self, message):
         self.app.call_from_thread(self._write_message, message)
+
+    def _update_user(self, username, color, action):
+        if action == "join":
+            self.connected_users.update({username: color})
+        elif action == "leave":
+            self.connected_users.pop(username, None)
+
+    def display_user(self, username, color, action):
+        self.app.call_from_thread(self._update_user, username, color, action)
+
+class UsersPanel(ModalScreen):
+    def __init__(self, connected_users):
+        super().__init__()
+        self.connected_users = connected_users
+
+    def compose(self) -> ComposeResult:
+        yield Static(id="user_panel")
+        yield Button("Close", id="close")
+
+    def on_mount(self):
+        content = ""
+        for user, color in self.connected_users.items():
+            content += f"● [{color}]{user}[/{color}]\n"
+        self.query_one("#user_panel", Static).update(content)
+
+    def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "close":
+            self.app.pop_screen()
 
 class LaternApp(App):
     CSS_PATH = "lantern.tcss"

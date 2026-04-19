@@ -30,7 +30,7 @@ def send_leave(username, color):
     except Exception:
         pass
 
-def receive_message(callback):
+def receive_message(callback, user_callback):
     while True:
         try:
             message_receive = client_socket.recv(1024)
@@ -39,8 +39,10 @@ def receive_message(callback):
             message_color = decoded_receive.get("color")
             if decoded_receive.get("type") == "join":
                 callback(f"{message_sender} - Joined")
+                user_callback(message_sender, message_color, "join")
             elif decoded_receive.get("type") == "leave":
                 callback(f"{message_sender} - Left")
+                user_callback(message_sender, message_color, "leave")
             else:
                 message_content = decoded_receive.get("message")
                 callback(f"[{message_color}]{message_sender}[/{message_color}] - {message_content}")
